@@ -1,0 +1,39 @@
+#!/usr/bin/env ruby
+
+require 'th8'
+
+def main
+  exit unless ARGV[0]
+
+  bus = ::TH8::Bus.new
+  cpu = ::TH8::CPU.new(bus)
+
+  ram = bus.attach('RAM', 0x8000, 0xA000)
+  ram.alloc(0x2000)
+  ram.set_read  { |offset| @mem[offset] }
+  ram.set_write { |offset, byte| @mem[offset] = (byte & 0xff) }
+
+  cpu.load(File.read(ARGV[0]).bytes)
+  
+  loop do
+    top = bus.dump(0x00, 0x80)
+    bot = bus.dump(0x8000, 0x80)
+
+    pc = '%04x' % cpu.instance_variable_get(:@pc)
+    a = '%02x' % cpu.instance_variable_get(:@a)
+    x = '%02x' % cpu.instance_variable_get(:@x)
+
+    print "\e[H\e[2J"
+    puts "pc: #{pc}  a: #{a}  x: #{x}"
+    puts "N: #{cpu.negative_flag} V: #{cpu.overflow_flag} B: #{cpu.break_flag} I: #{cpu.irq_flag} Z: #{cpu.zero_flag} C: #{cpu.carry_flag}"
+    puts '-----------------------------------------------'
+    puts top
+    puts '-----------------------------------------------'
+    puts bot
+
+    $stdin.readline
+    cpu.clock
+  end
+end
+
+main
