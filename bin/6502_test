@@ -1,0 +1,49 @@
+#!/usr/bin/env ruby
+
+require 'th8' # For Bus
+require 'cpudsl'
+require 'cpu6502'
+
+def main
+  exit unless ARGV[0]
+
+  bus = ::TH8::Bus.new
+  cpu = ::MOS6502.new(bus)
+  cpu.set_register_PC(0x8000)
+
+  ram = bus.attach('RAM', 0x8000, 0xA000)
+  ram.alloc(0x2000)
+  lazy = bus.attach('ZP+', 0x0000, 0x2000)
+  lazy.alloc(0x2000)
+
+  [ram,lazy].each do |x|
+    x.set_read  { |offset| @mem[offset] }
+    x.set_write { |offset, byte| @mem[offset] = (byte & 0xff) }
+  end
+
+  File.read(ARGV[0]).bytes.each_with_index do |byte, i|
+    ram.write(i, byte)
+  end
+  
+  loop do
+    top = bus.dump(0x00, 0x100)
+    bot = bus.dump(0x8000, 0x80)
+
+    pc = '%04x' % cpu.register_PC
+    a = '%02x' % cpu.register_A
+    x = '%02x' % cpu.register_X
+
+    print "\e[H\e[2J"
+    puts "pc: #{pc}  a: #{a}  x: #{x}"
+    puts "N: #{cpu.flag_N} V: #{cpu.flag_V} B: #{cpu.flag_B} I: #{cpu.flag_I} Z: #{cpu.flag_Z} C: #{cpu.flag_C}"
+    puts '-----------------------------------------------'
+    puts top
+    puts '-----------------------------------------------'
+    puts bot
+
+    $stdin.readline
+    cpu.clock
+  end
+end
+
+main

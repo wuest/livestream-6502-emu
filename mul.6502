@@ -1,0 +1,23 @@
+  ;; multiply 11 x 11
+A200  ;LDX #$0
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+E8  ;INX
+8680  ;STX $80
+A20B  ;LDX #$0A
+A900  ;LDA #$0  ; result
+6580  ;ADC $80
+CA  ;DEX 
+E000  ;CPX $#00
+F003  ;BEQ +2
+18  ;CLC
+90F6  ;JMP -4
+00  ;BRK
