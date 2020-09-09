@@ -26,11 +26,7 @@ module TH8
       end
 
       def dump(offset, size)
-        if self.instance_variable_defined?(:@mem)
-          @mem[offset, size]
-        else
-          []
-        end
+        (0...size).map { |addr| read(offset+addr) }
       end
     end
   end

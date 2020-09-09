@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+
+require 'th8' # For Bus
+require 'cpudsl'
+require 'cpu6502'
+
+def main
+  exit unless ARGV[0]
+
+  bus = ::TH8::Bus.new
+  cpu = ::MOS6502.new(bus)
+  cpu.set_register_PC(0xC000)
+
+  rom = bus.attach('ROM', 0x8000, 0xBFFF)
+  rom.alloc(0x4000)
+  rom2 = bus.attach('ROM (mirror)', 0xC000, 0xFFFF)
+
+  ram = bus.attach('RAM', 0x0000, 0x07FF)
+  ram.alloc(0x0800)
+  ram2 = bus.attach('RAM (m1)', 0x0800, 0x0FFF)
+  ram3 = bus.attach('RAM (m2)', 0x1000, 0x17FF)
+  ram4 = bus.attach('RAM (m3)', 0x1800, 0x1FFF)
+
+  [ram,rom].each do |x|
+    x.set_read  { |offset| @mem[offset] }
+  end
+  ram.set_write { |offset, byte| @mem[offset] = (byte & 0xff) }
+  [ram2, ram3, ram4].each do |x|
+    x.set_read  { |offset| ram.read(offset) }
+    x.set_write { |offset, byte| ram.write(offset, byte) }
+  end
+  rom2.set_read { |offset| rom.read(offset) }
+
+  File.read(ARGV[0]).bytes.drop(16).take(0x4000).each_with_index do |byte, i|
+    rom.instance_variable_get(:@mem)[i] = byte
+  end
+  
+  loop do
+    top = bus.dump(0x00, 0x100)
+    bot = bus.dump(0xC000, 0x80)
+
+    pc = '%04x' % cpu.register_PC
+    a = '%02x' % cpu.register_A
+    x = '%02x' % cpu.register_X
+
+    print "\e[H\e[2J"
+    puts "pc: #{pc}  a: #{a}  x: #{x}"
+    puts "N: #{cpu.flag_N} V: #{cpu.flag_V} B: #{cpu.flag_B} I: #{cpu.flag_I} Z: #{cpu.flag_Z} C: #{cpu.flag_C}"
+    puts '-----------------------------------------------'
+    puts top
+    puts '-----------------------------------------------'
+    puts bot
+
+    $stdin.readline
+    cpu.clock
+  end
+end
+
+main

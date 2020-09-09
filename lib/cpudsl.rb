@@ -9,7 +9,9 @@ module CPUDSL
         @__bus = bus
         @__cycles = 0
         self.class.instance_variable_get(:@__regs).each { |reg| self.instance_variable_set(reg, 0) }
-        p self.class.instance_variable_get(:@__regs)
+        if self.respond_to?(:cpu_init)
+          cpu_init
+        end
       end
 
       def set_cycles(count)
@@ -33,13 +35,25 @@ module CPUDSL
         self.define_method("set_register_#{name}") { |val| self.instance_variable_set("@register_#{name}", (val & ((1 << bits) - 1))) }
       end
 
-      def self.defstack(name, bits=nil)
+      def self.defstack(name, base=0x00, direction=:+, bits=nil)
         bits ||= self.instance_variable_get(:@__bits)
         self.instance_variable_get(:@__regs) << "@register_#{name}"
 
         self.instance_variable_set("@register_#{name}", 0)
         self.define_method("register_#{name}") { self.instance_variable_get("@register_#{name}") }
         self.define_method("set_register_#{name}") { |val| self.instance_variable_set("@register_#{name}", (val & ((1 << bits) - 1))) }
+        self.define_method("stack_#{name}_push") do |val_|
+          val    = val_ & (1 << bits)
+          offset = self.instance_variable_get("@register_#{name}")
+          @__bus.write(base + offset, val)
+          self.send("set_register_#{name}", offset + (bits / 8))
+        end
+        self.define_method("stack_#{name}_pop") do
+          offset = self.instance_variable_get("@register_#{name}")
+          value  = @__bus.read(base + offset)
+          self.send("set_register_#{name}", offset - (bits / 8))
+          value
+        end
       end
 
       def self.defpc(name, bits=nil)
@@ -76,6 +90,10 @@ module CPUDSL
           new_flags = (old_flags & (mask ^ (1 << bit))) | ((val & 1) << bit)
           self.instance_variable_set(self.class.instance_variable_get(:@__flags_register), new_flags)
         end
+      end
+
+      def self.definit(&routine)
+        self.define_method(:cpu_init, &routine)
       end
 
       def self.defop(opcode, mnemonic, operands, &routine)
