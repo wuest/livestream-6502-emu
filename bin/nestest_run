@@ -3,9 +3,16 @@
 require 'th8' # For Bus
 require 'cpudsl'
 require 'cpu6502'
+require 'mlog'
 
 def main
-  exit unless ARGV[0]
+  exit unless ARGV[1]
+  breakpoint = ARGV[2].to_i(16) if ARGV[2]
+
+  log = MLog.new(File.new(ARGV[1], 'w')) do |out,c|
+    out.write(sprintf("%04X A:%02X X:%02X Y:%02X P:%02X SP:%02X\n", c.register_PC, c.register_A, c.register_X, c.register_Y, c.register_F, c.register_S))
+    out.flush
+  end
 
   bus = ::TH8::Bus.new
   cpu = ::MOS6502.new(bus)
@@ -34,24 +41,35 @@ def main
   File.read(ARGV[0]).bytes.drop(16).take(0x4000).each_with_index do |byte, i|
     rom.instance_variable_get(:@mem)[i] = byte
   end
-  
+
   loop do
     top = bus.dump(0x00, 0x100)
-    bot = bus.dump(0xC000, 0x80)
+    mid = bus.dump(0x0180, 0x80)
+    bot = bus.dump(cpu.register_PC & 0xFFF0, 0x20)
+             .split(/[ \n]/)
+    bot[cpu.register_PC & 0xf].sub!(/^/, "\033[41m").sub!(/$/, "\033[0m")
+    bot = bot.each_slice(16).map { |x| x.join(' ') }.join("\n")
 
-    pc = '%04x' % cpu.register_PC
-    a = '%02x' % cpu.register_A
-    x = '%02x' % cpu.register_X
+    pc = '%04X' % cpu.register_PC
+    a = '%02X' % cpu.register_A
+    x = '%02X' % cpu.register_X
+    s = '%02X' % cpu.register_S
+    y = '%02X' % cpu.register_Y
 
     print "\e[H\e[2J"
-    puts "pc: #{pc}  a: #{a}  x: #{x}"
-    puts "N: #{cpu.flag_N} V: #{cpu.flag_V} B: #{cpu.flag_B} I: #{cpu.flag_I} Z: #{cpu.flag_Z} C: #{cpu.flag_C}"
+    puts "pc: #{pc}  a: #{a}  x: #{x}  y: #{y}  s: #{s}"
+    puts "N: #{cpu.flag_N} V: #{cpu.flag_V} B: #{cpu.flag_B} D: #{cpu.flag_D} I: #{cpu.flag_I} Z: #{cpu.flag_Z} C: #{cpu.flag_C}"
     puts '-----------------------------------------------'
     puts top
     puts '-----------------------------------------------'
+    puts mid
+    puts '-----------------------------------------------'
     puts bot
 
-    $stdin.readline
+    log.write(cpu) if cpu.cycles_remaining.zero?
+    breakpoint = nil if cpu.register_PC == breakpoint
+    $stdin.readline if breakpoint.nil?
+
     cpu.clock
   end
 end

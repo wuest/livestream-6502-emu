@@ -5,29 +5,31 @@ MOS6502 = CPUDSL.newcpu('MOS 6502', 8)
 MOS6502.defregister('X')
 MOS6502.defregister('Y')
 MOS6502.defregister('A')
-MOS6502.defstack('S')
-MOS6502.defpc('PC', 16)
+MOS6502.defstack('S', 0x0100, :-, 0xFD)
+MOS6502.defpc('PC', 0x8000, 16)
 
 # Flags:
-# NVxB xIZC
+# NVxB DIZC
 # |||| |||+- Carry
 # |||| ||+-- Zero
 # |||| |+--- Interrupt Disable
-# |||| +---- Unused
+# |||| +---- Decimal (Unused for Ricoh chip)
 # |||+------ Break
-# ||+------- Unused
+# ||+------- NMI/Unused
 # |+-------- Overflow
 # +--------- Negative
-MOS6502.defflags('F')
+MOS6502.defflags('F', 0x24)
 MOS6502.defflag('C', 0)
 MOS6502.defflag('Z', 1)
 MOS6502.defflag('I', 2)
+MOS6502.defflag('D', 3)
 MOS6502.defflag('B', 4)
+MOS6502.defflag('b', 5)
 MOS6502.defflag('V', 6)
 MOS6502.defflag('N', 7)
 
 MOS6502.defclock do
-  return self if flag_B.nonzero?
+  #return self if flag_B.nonzero?
 
   if cycles_remaining < 1
     opcode = read_advance_pc
@@ -38,76 +40,6 @@ MOS6502.defclock do
   self
 end
 
-=begin
-# Define boilerplate reads for addressing modes
-MOS6502.define_method(:immediate) do
-  read_advance_pc
-end
-
-MOS6502.define_method(:zero_page) do
-  addr = read_advance_pc
-  @__bus.read(addr)
-end
-
-MOS6502.define_method(:zero_page_x) do
-  addr = read_advance_pc
-  @__bus.read((addr + register_X) & 0xff)
-end
-
-MOS6502.define_method(:zero_page_y) do
-  addr = read_advance_pc
-  @__bus.read((addr + register_Y) & 0xff)
-end
-
-MOS6502.define_method(:absolute) do
-  addr_lsb = read_advance_pc
-  addr_msb = read_advance_pc
-  @__bus.read((addr_msb << 8) | addr_lsb)
-end
-
-MOS6502.define_method(:absolute_x) do
-  addr_lsb  = read_advance_pc
-  addr_msb  = read_advance_pc
-  addr_base = (addr_msb << 8) | addr_lsb
-  addr_eff  = addr_base + register_X
-  extra     = (addr_base & 0xff00) == (addr_eff & 0xff00) ? 0 : 1
-
-  data = @__bus.read(addr_eff)
-  [data,extra]
-end
-
-MOS6502.define_method(:absolute_y) do
-  addr_lsb  = read_advance_pc
-  addr_msb  = read_advance_pc
-  addr_base = (addr_msb << 8) | addr_lsb
-  addr_eff  = addr_base + register_Y
-  extra     = (addr_base & 0xff00) == (addr_eff & 0xff00) ? 0 : 1
-
-  data = @__bus.read(addr_eff)
-  [data,extra]
-end
-
-MOS6502.define_method(:indirect_x) do
-  addr_zp  = (read_advance_pc + register_X) & 0xff
-  addr_lsb = @__bus.read(addr_zp)
-  addr_msb = @__bus.read(addr_zp + 1)
-  addr_eff = (addr_msb << 8) | addr_lsb
-
-  @__bus.read(addr_eff)
-end
-
-MOS6502.define_method(:indirect_y) do
-  addr_zp   = read_advance_pc
-  addr_lsb  = @__bus.read(addr_zp)
-  addr_msb  = @__bus.read(addr_zp + 1)
-  addr_base = (addr_msb << 8) | addr_lsb
-  addr_eff  = addr_base + register_Y
-  extra     = (addr_base & 0xff00) == (addr_eff & 0xff00) ? 0 : 1
-
-  data = @__bus.read(addr_eff)
-  [data, extra]
-end
-=end
 # Define boilerplate reads for addressing modes
 MOS6502.define_method(:immediate) do
   read_advance_pc
@@ -898,11 +830,11 @@ MOS6502.defop(0x20, 'JSR $%02x%02x', 2) do
   lsb = read_advance_pc
   msb = read_advance_pc << 8
 
-  next_inst = register_PC
-  stack_S_push(next_inst & 0xff)
+  next_inst = register_PC - 1
   stack_S_push((next_inst & 0xff00) >> 8)
+  stack_S_push(next_inst & 0xff)
 
-  set_register_PC((msb | lsb) - 1)
+  set_register_PC(msb | lsb)
   set_cycles(6)
 end
 
@@ -1291,7 +1223,7 @@ MOS6502.defop(0x40, 'RTI', 0) do
   flags = stack_S_pop
   lsb   = stack_S_pop
   msb   = stack_S_pop
-  set_register_F(flags)
+  set_register_F(flags & 0xCF)
   set_register_PC((msb << 8) | lsb)
   set_cycles(6)
 end
@@ -1433,13 +1365,13 @@ end
 
 # PusH Processor status (flags)
 MOS6502.defop(0x08, 'PHP', 0) do
-  stack_S_push(register_F)
+  stack_S_push(register_F | 0x30)
   set_cycles(3)
 end
 
 # PulL Processor status (flags)
 MOS6502.defop(0x28, 'PLP', 0) do
-  set_register_F(stack_S_pop)
+  set_register_F(stack_S_pop & 0xCF)
   set_cycles(4)
 end
 
@@ -1482,93 +1414,3 @@ MOS6502.defop(0x8C, 'STY $%02x%02x', 2) do
   perform_sty(absolute)
   set_cycles(4)
 end
-
-=begin
-# Zero Page
-MOS6502.defop(0xA9, 'LDA #$%02x', 1) do
-  value = zero
-  set_register_A(value)
-
-  set_flag_N((value & 0x80) >> 7)
-  set_flag_Z(value == 0 ? 1 : 0)
-
-  set_cycles(2)
-end
-=end
-
-
-=begin
-# STX Zero Page
-MOS6502.defop(0x86, 'STX $%02x', 1) do
-  set_cycles(3)
-  value = read_advance_pc
-  @__bus.write(value, register_X)
-end
-=end
-
-=begin
-MOS6502.defop(0xA2, 'LDX #$%02x', 1) do
-  set_cycles(2)
-  value = read_advance_pc
-  set_register_X(value)
-  set_flag_N((value & 0x80) >> 7)
-  set_flag_Z(value == 0 ? 1 : 0)
-end
-=end
-
-=begin
-MOS6502.defop(0xA9, 'LDA #$%02x', 1) do
-  set_cycles(2)
-  value = read_advance_pc
-  set_register_A(value)
-  set_flag_N((value & 0x80) >> 7)
-  set_flag_Z(value == 0 ? 1 : 0)
-end
-=end
-
-=begin
-MOS6502.defop(0xCA, 'DEX', 0) do
-  set_cycles(2)
-  value = register_X
-  set_register_X(value - 1)
-  set_flag_N((value & 0x80) >> 7)
-  set_flag_Z(value == 0 ? 1 : 0)
-end
-=end
-
-=begin
-MOS6502.defop(0xE0, 'CPX #$%02x', 1) do
-  set_cycles(2)
-  value = read_advance_pc
-  set_flag_N((register_X & 0x80) >> 7)
-  set_flag_Z(value == register_X ? 1 : 0)
-  set_flag_C(register_X >= value ? 1 : 0)
-end
-=end
-
-=begin
-MOS6502.defop(0xE8, 'INX', 0) do
-  set_cycles(2)
-  value = register_X + 1
-  set_register_X(value)
-  set_flag_N((value & 0x80) >> 7)
-  set_flag_Z(value == 0 ? 1 : 0)
-end
-=end
-
-=begin
-MOS6502.defop(0xF0, 'BEQ #$%02x', 1) do
-  set_cycles(2)
-  offset = read_advance_pc
-
-  if flag_Z.nonzero?
-    # Add 1 cycle if branch taken AND cross a page boundary
-    old_pc = register_PC
-    jump = (0x80 & offset).nonzero? ? ~(0xff ^ x) : offset
-    new_pc = jump + old_pc
-    set_cycles(3) if (new_pc & 0xff00) != (old_pc & 0xff00)
-
-    set_register_PC(new_pc)
-  end
-end
-=end

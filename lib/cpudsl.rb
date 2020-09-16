@@ -3,12 +3,12 @@ module CPUDSL
     Class.new do
       self.instance_variable_set(:@__name, name)
       self.instance_variable_set(:@__bits, bits)
-      self.instance_variable_set(:@__regs, [])
+      self.instance_variable_set(:@__regs, {})
 
       def initialize(bus)
         @__bus = bus
         @__cycles = 0
-        self.class.instance_variable_get(:@__regs).each { |reg| self.instance_variable_set(reg, 0) }
+        self.class.instance_variable_get(:@__regs).each { |(reg,init)| self.instance_variable_set(reg, init) }
         if self.respond_to?(:cpu_init)
           cpu_init
         end
@@ -26,39 +26,36 @@ module CPUDSL
         @__cycles
       end
 
-      def self.defregister(name, bits=nil)
+      def self.defregister(name, init=0x00, bits=nil)
         bits ||= self.instance_variable_get(:@__bits)
-        self.instance_variable_get(:@__regs) << "@register_#{name}"
+        self.instance_variable_get(:@__regs)["@register_#{name}"] = init
 
-        self.instance_variable_set("@register_#{name}", 0)
         self.define_method("register_#{name}") { self.instance_variable_get("@register_#{name}") }
         self.define_method("set_register_#{name}") { |val| self.instance_variable_set("@register_#{name}", (val & ((1 << bits) - 1))) }
       end
 
-      def self.defstack(name, base=0x00, direction=:+, bits=nil)
+      def self.defstack(name, base=0x00, direction=:+, init=0x00, bits=nil)
         bits ||= self.instance_variable_get(:@__bits)
-        self.instance_variable_get(:@__regs) << "@register_#{name}"
+        self.instance_variable_get(:@__regs)["@register_#{name}"] = init
 
-        self.instance_variable_set("@register_#{name}", 0)
         self.define_method("register_#{name}") { self.instance_variable_get("@register_#{name}") }
         self.define_method("set_register_#{name}") { |val| self.instance_variable_set("@register_#{name}", (val & ((1 << bits) - 1))) }
         self.define_method("stack_#{name}_push") do |val_|
-          val    = val_ & (1 << bits)
+          val    = val_ & ((1 << bits) - 1)
           offset = self.instance_variable_get("@register_#{name}")
           @__bus.write(base + offset, val)
-          self.send("set_register_#{name}", offset + (bits / 8))
+          self.send("set_register_#{name}", offset.send(direction, (bits / 8)))
         end
         self.define_method("stack_#{name}_pop") do
-          offset = self.instance_variable_get("@register_#{name}")
-          value  = @__bus.read(base + offset)
-          self.send("set_register_#{name}", offset - (bits / 8))
-          value
+          offset = self.instance_variable_get("@register_#{name}").send(direction, (1 << bits) - (bits / 8))
+          self.send("set_register_#{name}", offset)
+          @__bus.read(base + self.send("register_#{name}"))
         end
       end
 
-      def self.defpc(name, bits=nil)
+      def self.defpc(name, init=0x0000, bits=nil)
         bits ||= self.instance_variable_get(:@__bits)
-        self.instance_variable_get(:@__regs) << "@register_#{name}"
+        self.instance_variable_get(:@__regs)["@register_#{name}"] = init
 
         self.instance_variable_set("@register_#{name}", 0)
         self.define_method("register_#{name}") { self.instance_variable_get("@register_#{name}") }
@@ -71,13 +68,13 @@ module CPUDSL
         end
       end
 
-      def self.defflags(name, bits=nil)
+      def self.defflags(name, init = 0x00, bits=nil)
         bits ||= self.instance_variable_get(:@__bits)
-        self.instance_variable_get(:@__regs) << "@register_#{name}"
+        self.instance_variable_get(:@__regs)["@register_#{name}"] = init
 
         self.instance_variable_set("@register_#{name}", 0)
         self.instance_variable_set(:@__flags_register, "@register_#{name}")
-        self.instance_variable_set(:@__flags_register_mask, ((1 << bits) -1))
+        self.instance_variable_set(:@__flags_register_mask, ((1 << bits) - 1))
         self.define_method("register_#{name}") { self.instance_variable_get("@register_#{name}") }
         self.define_method("set_register_#{name}") { |val| self.instance_variable_set("@register_#{name}", (val & ((1 << bits) - 1))) }
       end
