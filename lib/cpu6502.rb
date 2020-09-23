@@ -70,9 +70,9 @@ MOS6502.define_method(:absolute_x) do
   addr_msb  = read_advance_pc
   addr_base = (addr_msb << 8) | addr_lsb
   addr_eff  = addr_base + register_X
-  extra     = (addr_base & 0xff00) == (addr_eff & 0xff00) ? 0 : 1
+  extra     = ((addr_base & 0xff00) == (addr_eff & 0xff00)) ? 0 : 1
 
-  [addr_eff,extra]
+  [(addr_eff & 0xffff),extra]
 end
 
 MOS6502.define_method(:absolute_y) do
@@ -80,15 +80,15 @@ MOS6502.define_method(:absolute_y) do
   addr_msb  = read_advance_pc
   addr_base = (addr_msb << 8) | addr_lsb
   addr_eff  = addr_base + register_Y
-  extra     = (addr_base & 0xff00) == (addr_eff & 0xff00) ? 0 : 1
+  extra     = ((addr_base & 0xff00) == (addr_eff & 0xff00)) ? 0 : 1
 
-  [addr_eff,extra]
+  [(addr_eff & 0xffff),extra]
 end
 
 MOS6502.define_method(:indirect_x) do
   addr_zp  = (read_advance_pc + register_X) & 0xff
   addr_lsb = @__bus.read(addr_zp)
-  addr_msb = @__bus.read(addr_zp + 1)
+  addr_msb = @__bus.read((addr_zp + 1) & 0xff)
   addr_eff = (addr_msb << 8) | addr_lsb
 
   addr_eff
@@ -97,12 +97,12 @@ end
 MOS6502.define_method(:indirect_y) do
   addr_zp   = read_advance_pc
   addr_lsb  = @__bus.read(addr_zp)
-  addr_msb  = @__bus.read(addr_zp + 1)
+  addr_msb  = @__bus.read((addr_zp + 1) & 0xff)
   addr_base = (addr_msb << 8) | addr_lsb
   addr_eff  = addr_base + register_Y
-  extra     = (addr_base & 0xff00) == (addr_eff & 0xff00) ? 0 : 1
+  extra     = ((addr_base & 0xff00) == (addr_eff & 0xff00)) ? 0 : 1
 
-  [addr_eff, extra]
+  [(addr_eff & 0xffff), extra]
 end
 
 # Boilerplate ADC logic
@@ -162,7 +162,7 @@ end
 
 # Boilerplate CMP logic
 MOS6502.define_method(:perform_comparison) do |value, register|
-  set_flag_N((register & 0x80) >> 7)
+  set_flag_N((((register + 0x100) - (value & 0xFF)) & 0x80) >> 7)
   set_flag_Z(value == register ? 1 : 0)
   set_flag_C(register >= value ? 1 : 0)
 end
@@ -208,7 +208,7 @@ MOS6502.define_method(:perform_lda) do |operand|
   set_register_A(operand)
 
   set_flag_N((operand & 0x80) >> 7)
-  set_flag_Z(operand == 0 ? 1 : 0)
+  set_flag_Z((operand == 0) ? 1 : 0)
 end
 
 # Boilerplate LDX logic
@@ -234,7 +234,7 @@ MOS6502.define_method(:perform_lsr) do |operand|
 
   set_flag_C(byte & 0x01)
   set_flag_N(0)
-  set_flag_Z(result == 0 ? 1 : 0)
+  set_flag_Z((result == 0) ? 1 : 0)
 
   @__bus.write(operand, result)
 end
@@ -278,8 +278,9 @@ MOS6502.define_method(:perform_ror) do |operand|
 end
 
 # Boilerplate SBC logic
-MOS6502.define_method(:perform_sbc) do |operand|
-  result = register_A + (0xff ^ operand) + flag_C
+MOS6502.define_method(:perform_sbc) do |operand_|
+  operand = 0xff ^ operand_
+  result  = register_A + operand + flag_C
 
   # Calculate V flag
   result_N = (result & 0x80) >> 7
@@ -289,7 +290,7 @@ MOS6502.define_method(:perform_sbc) do |operand|
 
   set_flag_C((result & 0x100) >> 8)
   set_flag_N(result_N)
-  set_flag_Z((result & 0xff) == 0 ? 1 : 0)
+  set_flag_Z(((result & 0xff) == 0) ? 1 : 0)
   set_flag_V(oVerflow)
   set_register_A(result)
 end
@@ -307,6 +308,79 @@ end
 # Boilerplate STY logic
 MOS6502.define_method(:perform_sty) do |operand|
   @__bus.write(operand, register_Y)
+end
+
+# Boilerplate *LAX logic
+MOS6502.define_method(:perform_lax) do |operand|
+  set_register_X(operand)
+  set_register_A(operand)
+  set_flag_N(operand >> 7)
+  set_flag_Z((operand == 0) ? 1 : 0)
+end
+
+# Boilerplate *SAX logic
+MOS6502.define_method(:perform_sax) do |operand|
+  result = register_X & register_A
+
+  @__bus.write(operand, result)
+end
+
+# Boilerplate *DCP logic
+MOS6502.define_method(:perform_dcp) do |operand|
+  byte = @__bus.read(operand)
+  result = (byte + 0xff) & 0xff
+  @__bus.write(operand, result)
+
+  perform_comparison(result, register_A)
+end
+
+# Boilerplate *ISB logic
+MOS6502.define_method(:perform_isb) do |operand|
+  byte = @__bus.read(operand)
+  result = (byte + 1) & 0xff
+  @__bus.write(operand, result)
+
+  perform_sbc(result)
+end
+
+# Boilerplate *ISB logic
+MOS6502.define_method(:perform_slo) do |operand|
+  byte = @__bus.read(operand)
+  result = (byte << 1) & 0xff
+  @__bus.write(operand, result)
+
+  set_flag_C(byte >> 7)
+  perform_ora(result)
+end
+
+# Boilerplate *RLA logic
+MOS6502.define_method(:perform_rla) do |operand|
+  byte = @__bus.read(operand)
+  result = ((byte << 1) | flag_C) & 0xff
+  @__bus.write(operand, result)
+
+  set_flag_C((byte & 0x80) >> 7)
+  perform_and(result)
+end
+
+# Boilerplate *SRE logic
+MOS6502.define_method(:perform_sre) do |operand|
+  byte = @__bus.read(operand)
+  result = (byte >> 1)
+  @__bus.write(operand, result)
+
+  set_flag_C(byte & 0x01)
+  perform_eor(result)
+end
+
+# Boilerplate *RRA logic
+MOS6502.define_method(:perform_rra) do |operand|
+  byte = @__bus.read(operand)
+  result = (byte >> 1) | (flag_C << 7)
+  @__bus.write(operand, result)
+
+  set_flag_C(byte & 0x01)
+  perform_adc(result)
 end
 
 # ADd with Carry
@@ -351,14 +425,14 @@ end
 
 # Absolute, X offset
 MOS6502.defop(0x7D, 'ADC $%02x%02x,X', 2) do
-  operand,extra = absolute_x_read
+  operand,extra = absolute_x
   perform_adc(@__bus.read(operand))
   set_cycles(4 + extra)
 end
 
 # Absolute, Y offset
 MOS6502.defop(0x79, 'ADC $%02x%02x,Y', 2) do
-  operand,extra = absolute_y_read
+  operand,extra = absolute_y
   perform_adc(@__bus.read(operand))
   set_cycles(4 + extra)
 end
@@ -419,12 +493,13 @@ end
 
 # Indirect, X offset
 MOS6502.defop(0x21, 'AND ($%02x,X)', 1) do
-  perform_and(@__bus.read(indirect_x))
+  addy = indirect_x
+  perform_and(@__bus.read(addy))
   set_cycles(6)
 end
 
 # Indirect, Y offset
-MOS6502.defop(0x21, 'AND ($%02x),Y', 1) do
+MOS6502.defop(0x31, 'AND ($%02x),Y', 1) do
   operand,extra = indirect_y
   perform_and(@__bus.read(operand))
   set_cycles(5 + extra)
@@ -434,9 +509,15 @@ end
 
 # A Register
 MOS6502.defop(0x0A, 'ASL A', 0) do
-  a = register_A << 1
-  set_flag_C((a & 0x100) >> 8)
-  set_register_A(a & 0xff)
+  byte     = register_A << 1
+  result   = byte & 0xff
+  result_N = (result & 0x80) >> 7
+
+  set_flag_C((byte & 0x100) >> 8)
+  set_flag_N(result_N)
+  set_flag_Z((result) == 0 ? 1 : 0)
+
+  set_register_A(result)
   set_cycles(2)
 end
 
@@ -751,15 +832,9 @@ MOS6502.defop(0x78, 'SEI', 0) do
 end
 
 # CLear oVerflow
-MOS6502.defop(0x98, 'CLV', 0) do
+MOS6502.defop(0xB8, 'CLV', 0) do
   set_cycles(2)
   set_flag_V(0)
-end
-
-# SEt oVerflow
-MOS6502.defop(0xB8, 'SEV', 0) do
-  set_cycles(2)
-  set_flag_V(1)
 end
 
 # CLear Decimal
@@ -817,7 +892,7 @@ MOS6502.defop(0x6C, 'JMP ($%02x%02x)', 2) do
   lsb_ = read_advance_pc
   msb_ = read_advance_pc << 8
   lsb  = @__bus.read(msb_ | lsb_)
-  msb  = @__bus.read(msb_ | ((lsb_ + 1) & 0xff))
+  msb  = @__bus.read(msb_ | ((lsb_ + 1) & 0xff)) << 8
   set_register_PC(msb | lsb)
 
   set_cycles(5)
@@ -966,6 +1041,8 @@ end
 MOS6502.defop(0x4A, 'LSR A', 0) do
   a = register_A >> 1
   set_flag_C(register_A & 0x01)
+  set_flag_Z((a == 0) ? 1 : 0)
+  set_flag_N(0)
   set_register_A(a)
   set_cycles(2)
 end
@@ -1223,7 +1300,11 @@ MOS6502.defop(0x40, 'RTI', 0) do
   flags = stack_S_pop
   lsb   = stack_S_pop
   msb   = stack_S_pop
-  set_register_F(flags & 0xCF)
+
+  stack_value = flags & 0xCF
+  #flags_value = register_S & 0x20
+
+  set_register_F(stack_value | 0x20)
   set_register_PC((msb << 8) | lsb)
   set_cycles(6)
 end
@@ -1348,6 +1429,8 @@ end
 # Transfer Stack ptr to X
 MOS6502.defop(0xBA, 'TSX', 0) do
   set_register_X(register_S)
+  set_flag_N(register_X >> 7)
+  set_flag_Z(register_X == 0 ? 1 : 0)
   set_cycles(2)
 end
 
@@ -1360,6 +1443,11 @@ end
 # PulL Accumulator
 MOS6502.defop(0x68, 'PLA', 0) do
   set_register_A(stack_S_pop)
+
+  result_N = (register_A & 0x80) >> 7
+  set_flag_N(result_N)
+  set_flag_Z(register_A == 0 ? 1 : 0)
+
   set_cycles(4)
 end
 
@@ -1371,7 +1459,10 @@ end
 
 # PulL Processor status (flags)
 MOS6502.defop(0x28, 'PLP', 0) do
-  set_register_F(stack_S_pop & 0xCF)
+  stack_value = stack_S_pop & 0xCF
+  flags_value = register_S & 0x20
+  set_register_F(stack_value | flags_value)
+
   set_cycles(4)
 end
 
@@ -1413,4 +1504,426 @@ end
 MOS6502.defop(0x8C, 'STY $%02x%02x', 2) do
   perform_sty(absolute)
   set_cycles(4)
+end
+
+############################
+# ** Unofficial Opcodes ** #
+############################
+
+# No OPeration
+MOS6502.defop(0x1A, '*NOP', 0) do
+  set_cycles(2)
+end
+MOS6502.defop(0x3A, '*NOP', 0) do
+  set_cycles(2)
+end
+MOS6502.defop(0x5A, '*NOP', 0) do
+  set_cycles(2)
+end
+MOS6502.defop(0x7A, '*NOP', 0) do
+  set_cycles(2)
+end
+MOS6502.defop(0xDA, '*NOP', 0) do
+  set_cycles(2)
+end
+MOS6502.defop(0xFA, '*NOP', 0) do
+  set_cycles(2)
+end
+
+# DOP (Double-no OPeration)
+MOS6502.defop(0x04, '*NOP $%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(3)
+end
+MOS6502.defop(0x14, '*NOP $%02x,X', 1) do
+  _ = read_advance_pc
+  set_cycles(4)
+end
+MOS6502.defop(0x34, '*NOP $%02x,X', 1) do
+  _ = read_advance_pc
+  set_cycles(4)
+end
+MOS6502.defop(0x44, '*NOP $%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(3)
+end
+MOS6502.defop(0x54, '*NOP $%02x,X', 1) do
+  _ = read_advance_pc
+  set_cycles(4)
+end
+MOS6502.defop(0x64, '*NOP $%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(3)
+end
+MOS6502.defop(0x74, '*NOP $%02x,X', 1) do
+  _ = read_advance_pc
+  set_cycles(4)
+end
+MOS6502.defop(0x80, '*NOP #%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(2)
+end
+MOS6502.defop(0x82, '*NOP #%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(2)
+end
+MOS6502.defop(0x89, '*NOP #%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(2)
+end
+MOS6502.defop(0xC2, '*NOP #%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(2)
+end
+MOS6502.defop(0xD4, '*NOP $%02x,X', 1) do
+  _ = read_advance_pc
+  set_cycles(4)
+end
+MOS6502.defop(0xE2, '*NOP #%02x', 1) do
+  _ = read_advance_pc
+  set_cycles(2)
+end
+MOS6502.defop(0xF4, '*NOP $%02x,X', 1) do
+  _ = read_advance_pc
+  set_cycles(4)
+end
+
+# TOP (Triple-no OPeration)
+
+MOS6502.defop(0x0C, '*NOP $%02x%02x', 2) do
+  _ = absolute
+  set_cycles(4)
+end
+MOS6502.defop(0x1C, '*NOP $%02x%02x,X', 2) do
+  _,extra = absolute_x
+  set_cycles(4 + extra)
+end
+MOS6502.defop(0x3C, '*NOP $%02x%02x,X', 2) do
+  _,extra = absolute_x
+  set_cycles(4 + extra)
+end
+MOS6502.defop(0x5C, '*NOP $%02x%02x,X', 2) do
+  _,extra = absolute_x
+  set_cycles(4 + extra)
+end
+MOS6502.defop(0x7C, '*NOP $%02x%02x,X', 2) do
+  _,extra = absolute_x
+  set_cycles(4 + extra)
+end
+MOS6502.defop(0xDC, '*NOP $%02x%02x,X', 2) do
+  _,extra = absolute_x
+  set_cycles(4 + extra)
+end
+MOS6502.defop(0xFC, '*NOP $%02x%02x,X', 2) do
+  _,extra = absolute_x
+  set_cycles(4 + extra)
+end
+
+# Load Accumulator and X register
+
+MOS6502.defop(0xA7, '*LAX $%02x', 1) do
+  operand = @__bus.read(zero_page)
+  perform_lax(operand)
+  set_cycles(3)
+end
+
+MOS6502.defop(0xB7, '*LAX $%02x,Y', 1) do
+  operand = @__bus.read(zero_page_y)
+  perform_lax(operand)
+  set_cycles(4)
+end
+
+MOS6502.defop(0xAF, '*LAX $%02x%02x', 2) do
+  operand = @__bus.read(absolute)
+  perform_lax(operand)
+  set_cycles(4)
+end
+
+MOS6502.defop(0xBF, '*LAX $%02x%02x,Y', 1) do
+  operand_, extra = absolute_y
+  operand = @__bus.read(operand_)
+  perform_lax(operand)
+  set_cycles(4 + extra)
+end
+
+MOS6502.defop(0xA3, '*LAX ($%02x,Y)', 1) do
+  operand = @__bus.read(indirect_x)
+  perform_lax(operand)
+  set_cycles(6)
+end
+
+MOS6502.defop(0xB3, '*LAX ($%02x),Y', 1) do
+  operand_, extra = indirect_y
+  operand = @__bus.read(operand_)
+  perform_lax(operand)
+  set_cycles(5 + extra)
+end
+
+# Store the result of Accumulator and X register
+
+MOS6502.defop(0x87, '*SAX $%02x', 1) do
+  perform_sax(zero_page)
+  set_cycles(3)
+end
+
+MOS6502.defop(0x97, '*SAX $%02x,Y', 1) do
+  perform_sax(zero_page_y)
+  set_cycles(4)
+end
+
+MOS6502.defop(0x83, '*SAX ($%02x,X)', 1) do
+  perform_sax(indirect_x)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x8F, '*SAX $%02x%02x', 2) do
+  perform_sax(absolute)
+  set_cycles(4)
+end
+
+# SuBtract with Carry
+
+MOS6502.defop(0xEB, '*SBC #$%02x', 1) do
+  perform_sbc(immediate)
+  set_cycles(2)
+end
+
+# DeCrement Memory
+
+MOS6502.defop(0xC7, '*DCP $%02x', 1) do
+  perform_dcp(zero_page)
+  set_cycles(5)
+end
+
+MOS6502.defop(0xD7, '*DCP $%02x,X', 1) do
+  perform_dcp(zero_page_x)
+  set_cycles(6)
+end
+
+MOS6502.defop(0xCF, '*DCP $%02x%02x', 2) do
+  perform_dcp(absolute)
+  set_cycles(6)
+end
+
+MOS6502.defop(0xDF, '*DCP $%02x%02x,X', 2) do
+  operand,_extra = absolute_x
+  perform_dcp(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0xDB, '*DCP $%02x%02x,Y', 2) do
+  operand, _extra = absolute_y
+  perform_dcp(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0xC3, '*DCP ($%02x,X)', 1) do
+  perform_dcp(indirect_x)
+  set_cycles(8)
+end
+
+MOS6502.defop(0xD3, '*DCP ($%02x),Y', 1) do
+  operand, _extra = indirect_y
+  perform_dcp(operand)
+  set_cycles(8)
+end
+
+# Increment memory, SuBtract from accumulator
+
+MOS6502.defop(0xE7, '*ISB $%02x', 1) do
+  perform_isb(zero_page)
+  set_cycles(5)
+end
+
+MOS6502.defop(0xF7, '*ISB $%02x,X', 1) do
+  perform_isb(zero_page_x)
+  set_cycles(6)
+end
+
+MOS6502.defop(0xEF, '*ISB $%02x%02x', 2) do
+  perform_isb(absolute)
+  set_cycles(6)
+end
+
+MOS6502.defop(0xFF, '*ISB $%02x%02x,X', 2) do
+  operand,_extra = absolute_x
+  perform_isb(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0xFB, '*ISB $%02x%02x,Y', 2) do
+  operand, _extra = absolute_y
+  perform_isb(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0xE3, '*ISB ($%02x,X)', 1) do
+  perform_isb(indirect_x)
+  set_cycles(8)
+end
+
+MOS6502.defop(0xF3, '*ISB ($%02x),Y', 1) do
+  operand, _extra = indirect_y
+  perform_isb(operand)
+  set_cycles(8)
+end
+
+# arithmetic Shift Left memory, then Or with accumulator
+
+MOS6502.defop(0x07, '*SLO $%02x', 1) do
+  perform_slo(zero_page)
+  set_cycles(5)
+end
+
+MOS6502.defop(0x17, '*SLO $%02x,X', 1) do
+  perform_slo(zero_page_x)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x0F, '*SLO $%02x%02x', 2) do
+  perform_slo(absolute)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x1F, '*SLO $%02x%02x,X', 2) do
+  operand,_extra = absolute_x
+  perform_slo(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x1B, '*SLO $%02x%02x,Y', 2) do
+  operand, _extra = absolute_y
+  perform_slo(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x03, '*SLO ($%02x,X)', 1) do
+  perform_slo(indirect_x)
+  set_cycles(8)
+end
+
+MOS6502.defop(0x13, '*SLO ($%02x),Y', 1) do
+  operand, _extra = indirect_y
+  perform_slo(operand)
+  set_cycles(8)
+end
+
+# Rotate Left memory, then And with accumulator
+
+MOS6502.defop(0x27, '*RLA $%02x', 1) do
+  perform_rla(zero_page)
+  set_cycles(5)
+end
+
+MOS6502.defop(0x37, '*RLA $%02x,X', 1) do
+  perform_rla(zero_page_x)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x2F, '*RLA $%02x%02x', 2) do
+  perform_rla(absolute)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x3F, '*RLA $%02x%02x,X', 2) do
+  operand,_extra = absolute_x
+  perform_rla(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x3B, '*RLA $%02x%02x,Y', 2) do
+  operand, _extra = absolute_y
+  perform_rla(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x23, '*RLA ($%02x,X)', 1) do
+  perform_rla(indirect_x)
+  set_cycles(8)
+end
+
+MOS6502.defop(0x33, '*RLA ($%02x),Y', 1) do
+  operand, _extra = indirect_y
+  perform_rla(operand)
+  set_cycles(8)
+end
+
+# Shift Right memory, then Exclusive or with accumulator
+
+MOS6502.defop(0x47, '*SRE $%02x', 1) do
+  perform_sre(zero_page)
+  set_cycles(5)
+end
+
+MOS6502.defop(0x57, '*SRE $%02x,X', 1) do
+  perform_sre(zero_page_x)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x4F, '*SRE $%02x%02x', 2) do
+  perform_sre(absolute)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x5F, '*SRE $%02x%02x,X', 2) do
+  operand,_extra = absolute_x
+  perform_sre(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x5B, '*SRE $%02x%02x,Y', 2) do
+  operand, _extra = absolute_y
+  perform_sre(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x43, '*SRE ($%02x,X)', 1) do
+  perform_sre(indirect_x)
+  set_cycles(8)
+end
+
+MOS6502.defop(0x53, '*SRE ($%02x),Y', 1) do
+  operand, _extra = indirect_y
+  perform_sre(operand)
+  set_cycles(8)
+end
+
+# Rotate Right memory, then Add to accumulator with carry
+
+MOS6502.defop(0x67, '*RRA $%02x', 1) do
+  perform_rra(zero_page)
+  set_cycles(5)
+end
+
+MOS6502.defop(0x77, '*RRA $%02x,X', 1) do
+  perform_rra(zero_page_x)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x6F, '*RRA $%02x%02x', 2) do
+  perform_rra(absolute)
+  set_cycles(6)
+end
+
+MOS6502.defop(0x7F, '*RRA $%02x%02x,X', 2) do
+  operand,_extra = absolute_x
+  perform_rra(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x7B, '*RRA $%02x%02x,Y', 2) do
+  operand, _extra = absolute_y
+  perform_rra(operand)
+  set_cycles(7)
+end
+
+MOS6502.defop(0x63, '*RRA ($%02x,X)', 1) do
+  perform_rra(indirect_x)
+  set_cycles(8)
+end
+
+MOS6502.defop(0x73, '*RRA ($%02x),Y', 1) do
+  operand, _extra = indirect_y
+  perform_rra(operand)
+  set_cycles(8)
 end
