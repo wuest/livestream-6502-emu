@@ -44,11 +44,25 @@ def main
 
   loop do
     top = bus.dump(0x00, 0x100)
-    mid = bus.dump(0x0180, 0x80)
-    bot = bus.dump(cpu.register_PC & 0xFFF0, 0x20)
+    mid = bus.dump(0x0600, 0x100)
+    bot = bus.dump(cpu.program_counter & 0xFFF0, 0x20)
              .split(/[ \n]/)
-    bot[cpu.register_PC & 0xf].sub!(/^/, "\033[41m").sub!(/$/, "\033[0m")
+    bot[cpu.program_counter & 0xf].sub!(/^/, "\033[41m").sub!(/$/, "\033[0m")
     bot = bot.each_slice(16).map { |x| x.join(' ') }.join("\n")
+
+    disasm = bus.dump(cpu.program_counter, 0x20)
+                .split(/[ \n]/)
+                .each_with_index
+                .map { |opcode, index| [opcode.to_i(16), cpu.program_counter + index] }
+                .reduce([[], 0]) do |(disassembly, bytes_remaining), (opcode, address)|
+                                   if bytes_remaining < 1
+                                     next_disasm, bytes_skip = cpu.disassemble(opcode, address)
+                                     [disassembly + [sprintf('%04X: ', address) + next_disasm], bytes_skip]
+                                   else
+                                     [disassembly, bytes_remaining-1]
+                                   end
+                                 end
+                .first
 
     pc = '%04X' % cpu.register_PC
     a = '%02X' % cpu.register_A
@@ -65,6 +79,8 @@ def main
     puts mid
     puts '-----------------------------------------------'
     puts bot
+    puts
+    puts disasm.take(3).join("\n")
 
     log.write(cpu) if cpu.cycles_remaining.zero?
     breakpoint = nil if cpu.register_PC == breakpoint

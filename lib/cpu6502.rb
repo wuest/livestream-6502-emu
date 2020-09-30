@@ -879,7 +879,7 @@ end
 # ** JuMP **
 
 # Absolute
-MOS6502.defop(0x4C, 'JMP $%02x%02x', 2) do
+MOS6502.defop(0x4C, 'JMP $%02x%02x', 2, true) do
   lsb = read_advance_pc
   msb = read_advance_pc << 8
   set_register_PC(msb | lsb)
@@ -888,7 +888,7 @@ MOS6502.defop(0x4C, 'JMP $%02x%02x', 2) do
 end
 
 # Indirect
-MOS6502.defop(0x6C, 'JMP ($%02x%02x)', 2) do
+MOS6502.defop(0x6C, 'JMP ($%02x%02x)', 2, true) do
   lsb_ = read_advance_pc
   msb_ = read_advance_pc << 8
   lsb  = @__bus.read(msb_ | lsb_)
@@ -901,7 +901,7 @@ end
 # ** Jump to SubRoutine **
 
 # Absolute
-MOS6502.defop(0x20, 'JSR $%02x%02x', 2) do
+MOS6502.defop(0x20, 'JSR $%02x%02x', 2, true) do
   lsb = read_advance_pc
   msb = read_advance_pc << 8
 
@@ -935,20 +935,20 @@ MOS6502.defop(0xB5, 'LDA $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0xAD, 'LDA $%02x%02x', 2) do
+MOS6502.defop(0xAD, 'LDA $%02x%02x', 2, true) do
   perform_lda(@__bus.read(absolute))
   set_cycles(4)
 end
 
 # Absolute, X offset
-MOS6502.defop(0xBD, 'LDA $%02x%02x,X', 2) do
+MOS6502.defop(0xBD, 'LDA $%02x%02x,X', 2, true) do
   operand,extra = absolute_x
   perform_lda(@__bus.read(operand))
   set_cycles(4 + extra)
 end
 
 # Absolute, Y offset
-MOS6502.defop(0xB9, 'LDA $%02x%02x,Y', 2) do
+MOS6502.defop(0xB9, 'LDA $%02x%02x,Y', 2, true) do
   operand,extra = absolute_y
   perform_lda(@__bus.read(operand))
   set_cycles(4 + extra)
@@ -989,13 +989,13 @@ MOS6502.defop(0xB6, 'LDX $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0xAE, 'LDX $%02x%02x', 2) do
+MOS6502.defop(0xAE, 'LDX $%02x%02x', 2, true) do
   perform_ldx(@__bus.read(absolute))
   set_cycles(4)
 end
 
 # Absolute, Y offset
-MOS6502.defop(0xBE, 'LDX $%02x%02x,Y', 2) do
+MOS6502.defop(0xBE, 'LDX $%02x%02x,Y', 2, true) do
   operand,extra = absolute_y
   perform_ldx(@__bus.read(operand))
   set_cycles(4 + extra)
@@ -1023,13 +1023,13 @@ MOS6502.defop(0xB4, 'LDY $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0xAC, 'LDY $%02x%02x', 2) do
+MOS6502.defop(0xAC, 'LDY $%02x%02x', 2, true) do
   perform_ldy(@__bus.read(absolute))
   set_cycles(4)
 end
 
 # Absolute, X offset
-MOS6502.defop(0xBC, 'LDY $%02x%02x,X', 2) do
+MOS6502.defop(0xBC, 'LDY $%02x%02x,X', 2, true) do
   operand,extra = absolute_x
   perform_ldy(@__bus.read(operand))
   set_cycles(4 + extra)
@@ -1060,13 +1060,13 @@ MOS6502.defop(0x56, 'LSR $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0x4E, 'LSR $%02x%02x', 2) do
+MOS6502.defop(0x4E, 'LSR $%02x%02x', 2, true) do
   perform_lsr(absolute)
   set_cycles(6)
 end
 
 # Absolute, X offset
-MOS6502.defop(0x5E, 'LSR $%02x%02x,X', 2) do
+MOS6502.defop(0x5E, 'LSR $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   set_cycles(7)
   perform_lsr(operand)
@@ -1097,20 +1097,20 @@ MOS6502.defop(0x15, 'ORA $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0x0D, 'ORA $%02x%02x', 2) do
+MOS6502.defop(0x0D, 'ORA $%02x%02x', 2, true) do
   perform_ora(@__bus.read(absolute))
   set_cycles(4)
 end
 
 # Absolute, X offset
-MOS6502.defop(0x1D, 'ORA $%02x%02x,X', 2) do
+MOS6502.defop(0x1D, 'ORA $%02x%02x,X', 2, true) do
   operand,extra = absolute_x
   perform_ora(@__bus.read(operand))
   set_cycles(4 + extra)
 end
 
 # Absolute, Y offset
-MOS6502.defop(0x19, 'ORA $%02x%02x,Y', 2) do
+MOS6502.defop(0x19, 'ORA $%02x%02x,Y', 2, true) do
   operand,extra = absolute_y
   perform_ora(@__bus.read(operand))
   set_cycles(4 + extra)
@@ -1241,13 +1241,13 @@ MOS6502.defop(0x36, 'ROL $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0x2E, 'ROL $%02x%02x', 2) do
+MOS6502.defop(0x2E, 'ROL $%02x%02x', 2, true) do
   perform_rol(absolute)
   set_cycles(6)
 end
 
 # Absolute, X offset
-MOS6502.defop(0x3E, 'ROL $%02x%02x,X', 2) do
+MOS6502.defop(0x3E, 'ROL $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   set_cycles(7)
   perform_rol(operand)
@@ -1283,13 +1283,13 @@ MOS6502.defop(0x76, 'ROR $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0x6E, 'ROR $%02x%02x', 2) do
+MOS6502.defop(0x6E, 'ROR $%02x%02x', 2, true) do
   perform_ror(absolute)
   set_cycles(6)
 end
 
 # Absolute, X offset
-MOS6502.defop(0x7E, 'ROR $%02x%02x,X', 2) do
+MOS6502.defop(0x7E, 'ROR $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   set_cycles(7)
   perform_ror(operand)
@@ -1339,20 +1339,20 @@ MOS6502.defop(0xF5, 'SBC $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0xED, 'SBC $%02x%02x', 2) do
+MOS6502.defop(0xED, 'SBC $%02x%02x', 2, true) do
   perform_sbc(@__bus.read(absolute))
   set_cycles(4)
 end
 
 # Absolute, X offset
-MOS6502.defop(0xFD, 'SBC $%02x%02x,X', 2) do
+MOS6502.defop(0xFD, 'SBC $%02x%02x,X', 2, true) do
   operand,extra = absolute_x
   perform_sbc(@__bus.read(operand))
   set_cycles(4 + extra)
 end
 
 # Absolute, Y offset
-MOS6502.defop(0xF9, 'SBC $%02x%02x,Y', 2) do
+MOS6502.defop(0xF9, 'SBC $%02x%02x,Y', 2, true) do
   operand,extra = absolute_y
   perform_sbc(@__bus.read(operand))
   set_cycles(4 + extra)
@@ -1386,20 +1386,20 @@ MOS6502.defop(0x95, 'STA $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0x8D, 'STA $%02x%02x', 2) do
+MOS6502.defop(0x8D, 'STA $%02x%02x', 2, true) do
   perform_sta(absolute)
   set_cycles(4)
 end
 
 # Absolute, X offset
-MOS6502.defop(0x9D, 'STA $%02x%02x,X', 2) do
+MOS6502.defop(0x9D, 'STA $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   perform_sta(operand)
   set_cycles(5)
 end
 
 # Absolute, Y offset
-MOS6502.defop(0x99, 'STA $%02x%02x,Y', 2) do
+MOS6502.defop(0x99, 'STA $%02x%02x,Y', 2, true) do
   operand,_extra = absolute_y
   perform_sta(operand)
   set_cycles(5)
@@ -1481,7 +1481,7 @@ MOS6502.defop(0x96, 'STX $%02x,Y', 1) do
 end
 
 # Absolute
-MOS6502.defop(0x8E, 'STX $%02x%02x', 2) do
+MOS6502.defop(0x8E, 'STX $%02x%02x', 2, true) do
   perform_stx(absolute)
   set_cycles(4)
 end
@@ -1501,7 +1501,7 @@ MOS6502.defop(0x94, 'STY $%02x,X', 1) do
 end
 
 # Absolute
-MOS6502.defop(0x8C, 'STY $%02x%02x', 2) do
+MOS6502.defop(0x8C, 'STY $%02x%02x', 2, true) do
   perform_sty(absolute)
   set_cycles(4)
 end
@@ -1633,13 +1633,13 @@ MOS6502.defop(0xB7, '*LAX $%02x,Y', 1) do
   set_cycles(4)
 end
 
-MOS6502.defop(0xAF, '*LAX $%02x%02x', 2) do
+MOS6502.defop(0xAF, '*LAX $%02x%02x', 2, true) do
   operand = @__bus.read(absolute)
   perform_lax(operand)
   set_cycles(4)
 end
 
-MOS6502.defop(0xBF, '*LAX $%02x%02x,Y', 1) do
+MOS6502.defop(0xBF, '*LAX $%02x%02x,Y', 2, true) do
   operand_, extra = absolute_y
   operand = @__bus.read(operand_)
   perform_lax(operand)
@@ -1676,7 +1676,7 @@ MOS6502.defop(0x83, '*SAX ($%02x,X)', 1) do
   set_cycles(6)
 end
 
-MOS6502.defop(0x8F, '*SAX $%02x%02x', 2) do
+MOS6502.defop(0x8F, '*SAX $%02x%02x', 2, true) do
   perform_sax(absolute)
   set_cycles(4)
 end
@@ -1700,18 +1700,18 @@ MOS6502.defop(0xD7, '*DCP $%02x,X', 1) do
   set_cycles(6)
 end
 
-MOS6502.defop(0xCF, '*DCP $%02x%02x', 2) do
+MOS6502.defop(0xCF, '*DCP $%02x%02x', 2, true) do
   perform_dcp(absolute)
   set_cycles(6)
 end
 
-MOS6502.defop(0xDF, '*DCP $%02x%02x,X', 2) do
+MOS6502.defop(0xDF, '*DCP $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   perform_dcp(operand)
   set_cycles(7)
 end
 
-MOS6502.defop(0xDB, '*DCP $%02x%02x,Y', 2) do
+MOS6502.defop(0xDB, '*DCP $%02x%02x,Y', 2, true) do
   operand, _extra = absolute_y
   perform_dcp(operand)
   set_cycles(7)
@@ -1740,18 +1740,18 @@ MOS6502.defop(0xF7, '*ISB $%02x,X', 1) do
   set_cycles(6)
 end
 
-MOS6502.defop(0xEF, '*ISB $%02x%02x', 2) do
+MOS6502.defop(0xEF, '*ISB $%02x%02x', 2, true) do
   perform_isb(absolute)
   set_cycles(6)
 end
 
-MOS6502.defop(0xFF, '*ISB $%02x%02x,X', 2) do
+MOS6502.defop(0xFF, '*ISB $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   perform_isb(operand)
   set_cycles(7)
 end
 
-MOS6502.defop(0xFB, '*ISB $%02x%02x,Y', 2) do
+MOS6502.defop(0xFB, '*ISB $%02x%02x,Y', 2, true) do
   operand, _extra = absolute_y
   perform_isb(operand)
   set_cycles(7)
@@ -1780,18 +1780,18 @@ MOS6502.defop(0x17, '*SLO $%02x,X', 1) do
   set_cycles(6)
 end
 
-MOS6502.defop(0x0F, '*SLO $%02x%02x', 2) do
+MOS6502.defop(0x0F, '*SLO $%02x%02x', 2, true) do
   perform_slo(absolute)
   set_cycles(6)
 end
 
-MOS6502.defop(0x1F, '*SLO $%02x%02x,X', 2) do
+MOS6502.defop(0x1F, '*SLO $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   perform_slo(operand)
   set_cycles(7)
 end
 
-MOS6502.defop(0x1B, '*SLO $%02x%02x,Y', 2) do
+MOS6502.defop(0x1B, '*SLO $%02x%02x,Y', 2, true) do
   operand, _extra = absolute_y
   perform_slo(operand)
   set_cycles(7)
@@ -1820,18 +1820,18 @@ MOS6502.defop(0x37, '*RLA $%02x,X', 1) do
   set_cycles(6)
 end
 
-MOS6502.defop(0x2F, '*RLA $%02x%02x', 2) do
+MOS6502.defop(0x2F, '*RLA $%02x%02x', 2, true) do
   perform_rla(absolute)
   set_cycles(6)
 end
 
-MOS6502.defop(0x3F, '*RLA $%02x%02x,X', 2) do
+MOS6502.defop(0x3F, '*RLA $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   perform_rla(operand)
   set_cycles(7)
 end
 
-MOS6502.defop(0x3B, '*RLA $%02x%02x,Y', 2) do
+MOS6502.defop(0x3B, '*RLA $%02x%02x,Y', 2, true) do
   operand, _extra = absolute_y
   perform_rla(operand)
   set_cycles(7)
@@ -1860,18 +1860,18 @@ MOS6502.defop(0x57, '*SRE $%02x,X', 1) do
   set_cycles(6)
 end
 
-MOS6502.defop(0x4F, '*SRE $%02x%02x', 2) do
+MOS6502.defop(0x4F, '*SRE $%02x%02x', 2, true) do
   perform_sre(absolute)
   set_cycles(6)
 end
 
-MOS6502.defop(0x5F, '*SRE $%02x%02x,X', 2) do
+MOS6502.defop(0x5F, '*SRE $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   perform_sre(operand)
   set_cycles(7)
 end
 
-MOS6502.defop(0x5B, '*SRE $%02x%02x,Y', 2) do
+MOS6502.defop(0x5B, '*SRE $%02x%02x,Y', 2, true) do
   operand, _extra = absolute_y
   perform_sre(operand)
   set_cycles(7)
@@ -1900,18 +1900,18 @@ MOS6502.defop(0x77, '*RRA $%02x,X', 1) do
   set_cycles(6)
 end
 
-MOS6502.defop(0x6F, '*RRA $%02x%02x', 2) do
+MOS6502.defop(0x6F, '*RRA $%02x%02x', 2, true) do
   perform_rra(absolute)
   set_cycles(6)
 end
 
-MOS6502.defop(0x7F, '*RRA $%02x%02x,X', 2) do
+MOS6502.defop(0x7F, '*RRA $%02x%02x,X', 2, true) do
   operand,_extra = absolute_x
   perform_rra(operand)
   set_cycles(7)
 end
 
-MOS6502.defop(0x7B, '*RRA $%02x%02x,Y', 2) do
+MOS6502.defop(0x7B, '*RRA $%02x%02x,Y', 2, true) do
   operand, _extra = absolute_y
   perform_rra(operand)
   set_cycles(7)

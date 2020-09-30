@@ -4,6 +4,7 @@ module CPUDSL
       self.instance_variable_set(:@__name, name)
       self.instance_variable_set(:@__bits, bits)
       self.instance_variable_set(:@__regs, {})
+      self.instance_variable_set(:@__disasm, {}) # Layout: [mnemonic_format_string, operand_bytes, reverse_order?]
 
       def initialize(bus)
         @__bus = bus
@@ -24,6 +25,13 @@ module CPUDSL
 
       def cycles_remaining
         @__cycles
+      end
+
+      def disassemble(opcode, addr=program_counter)
+        format_string, operands, reverse = self.class.instance_variable_get(:@__disasm).fetch(opcode, ["DB #{sprintf('%02X', opcode)}", 0, false])
+        operand_bytes_ = (1..operands).map { |offset| @__bus.read(addr + offset) }
+        operand_bytes  = reverse ? operand_bytes_.reverse : operand_bytes_
+        [sprintf(format_string, *operand_bytes), operands]
       end
 
       def self.defregister(name, init=0x00, bits=nil)
@@ -56,6 +64,8 @@ module CPUDSL
       def self.defpc(name, init=0x0000, bits=nil)
         bits ||= self.instance_variable_get(:@__bits)
         self.instance_variable_get(:@__regs)["@register_#{name}"] = init
+
+        self.define_method("program_counter") { self.instance_variable_get("@register_#{name}") }
 
         self.instance_variable_set("@register_#{name}", 0)
         self.define_method("register_#{name}") { self.instance_variable_get("@register_#{name}") }
@@ -93,8 +103,9 @@ module CPUDSL
         self.define_method(:cpu_init, &routine)
       end
 
-      def self.defop(opcode, mnemonic, operands, &routine)
+      def self.defop(opcode, mnemonic, operands, reverse_bytes=false, &routine)
         self.define_method("op_#{opcode}", &routine)
+        self.instance_variable_get(:@__disasm)[opcode] = [mnemonic, operands, reverse_bytes]
       end
 
       def self.defclock(&routine)
